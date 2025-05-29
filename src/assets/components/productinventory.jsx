@@ -4,21 +4,27 @@ import { Package, Plus, Minus, RefreshCw, AlertCircle, Edit3, Trash2, Search, Fi
 
 export default function ProductInventory() {
   const [products, setProducts] = useState([]);
-  console.log(products,"kkkkkkkkkkkk");
-  
-  const [formData, setFormData] = useState({
-    name: "",
-    variants: [{ name: "", subVariants: [""] }],
-  });
+
   const [stockAction, setStockAction] = useState({
     productId: "",
-    variant: "",
+    variantCombination: "",
     quantity: 1,
-    action: "add",
+    action: "add"
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [formData, setFormData] = useState({
+    productName: "",
+    productCode: "",
+    productImage: "",
+    hsnCode: "",
+    createdUser: "3fa85f64-5717-4562-b3fc-2c963f66afa6", // You might want to get this from user context
+    variants: [{
+      name: "",
+      options: [""]
+    }]
+  });
 
   useEffect(() => {
     fetchProducts();
@@ -33,69 +39,153 @@ export default function ProductInventory() {
     }
   };
 
-  const handleFormChange = (index, subIndex, e) => {
-    const newVariants = [...formData.variants];
-    if (e.target.name === "variant") {
-      newVariants[index].name = e.target.value;
-    } else {
-      newVariants[index].subVariants[subIndex] = e.target.value;
-    }
-    setFormData({ ...formData, variants: newVariants });
-  };
+  // Updated initial form state
 
-  const addVariant = () => {
-    setFormData({
-      ...formData,
-      variants: [...formData.variants, { name: "", subVariants: [""] }],
-    });
-  };
 
-  const addSubVariant = (index) => {
-    const newVariants = [...formData.variants];
-    newVariants[index].subVariants.push("");
-    setFormData({ ...formData, variants: newVariants });
-  };
-  const removeVariant = (index) => {
-    const newVariants = [...formData.variants];
-    newVariants.splice(index, 1);
-    setFormData({ ...formData, variants: newVariants });
-  };
-
-  const removeSubVariant = (variantIndex, subVariantIndex) => {
-    const newVariants = [...formData.variants];
-    newVariants[variantIndex].subVariants.splice(subVariantIndex, 1);
-    setFormData({ ...formData, variants: newVariants });
-  };
-
+  // Updated handleCreateProduct function
   const handleCreateProduct = async () => {
-    if (!formData.name.trim()) return setError("Product name is required.");
+    if (!formData.productName.trim()) return setError("Product name is required.");
+    if (!formData.productCode.trim()) return setError("Product code is required.");
 
+    // Transform the form data to match API format
+    const productData = {
+      productCode: formData.productCode,
+      productName: formData.productName,
+      productImage: formData.productImage || "",
+      createdUser: formData.createdUser,
+      hsnCode: formData.hsnCode || "",
+      variants: formData.variants
+        .filter(variant => variant.name.trim()) // Only include variants with names
+        .map(variant => ({
+          name: variant.name,
+          options: variant.options.filter(option => option.trim()) // Only include non-empty options
+        }))
+    };
+
+    setLoading(true);
     try {
-      await axios.post("/api/products", formData);
-      setFormData({ name: "", variants: [{ name: "", subVariants: [""] }] });
+      await axios.post("ProductInventory/create", productData);
+
+      // Reset form
+      setFormData({
+        productName: "",
+        productCode: "",
+        productImage: "",
+        hsnCode: "",
+        createdUser: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        variants: [{ name: "", options: [""] }]
+      });
+
       setError("");
       fetchProducts();
     } catch (err) {
-      setError("Failed to create product.");
+      console.error('Create product error:', err);
+      setError(err.response?.data?.message || "Failed to create product.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Updated handleFormChange function
+  const handleFormChange = (variantIndex, optionIndex, e) => {
+    const { name, value } = e.target;
+    const updatedFormData = { ...formData };
+
+    if (name === 'variant') {
+      updatedFormData.variants[variantIndex].name = value;
+    } else if (optionIndex !== null) {
+      updatedFormData.variants[variantIndex].options[optionIndex] = value;
+    }
+
+    setFormData(updatedFormData);
+  };
+
+  // Updated addVariant function
+  const addVariant = () => {
+    setFormData({
+      ...formData,
+      variants: [...formData.variants, { name: "", options: [""] }]
+    });
+  };
+
+  // Updated removeVariant function
+  const removeVariant = (index) => {
+    const updatedVariants = formData.variants.filter((_, i) => i !== index);
+    setFormData({ ...formData, variants: updatedVariants });
+  };
+
+  // Updated addSubVariant function (now addOption)
+  const addSubVariant = (variantIndex) => {
+    const updatedFormData = { ...formData };
+    updatedFormData.variants[variantIndex].options.push("");
+    setFormData(updatedFormData);
+  };
+
+  // Updated removeSubVariant function (now removeOption)
+  const removeSubVariant = (variantIndex, optionIndex) => {
+    const updatedFormData = { ...formData };
+    updatedFormData.variants[variantIndex].options =
+      updatedFormData.variants[variantIndex].options.filter((_, i) => i !== optionIndex);
+    setFormData(updatedFormData);
+  };
+
   const handleStockChange = async () => {
+    if (!stockAction.productId.trim()) {
+      return setError("Product ID is required.");
+    }
+
+    if (!stockAction.variantCombination.trim()) {
+      return setError("Variant combination is required.");
+    }
+
+    if (stockAction.quantity <= 0) {
+      return setError("Quantity must be greater than 0.");
+    }
+
+    // Prepare the request data
+    const requestData = {
+      productId: stockAction.productId,
+      variantCombination: stockAction.variantCombination,
+      quantity: stockAction.quantity
+    };
+
+    // Determine the endpoint based on action
+    const endpoint = stockAction.action === "add"
+      ? "ProductInventory/stock/add"
+      : "ProductInventory/stock/remove";
+
+    setLoading(true);
     try {
-      await axios.post(`/api/products/${stockAction.productId}/stock`, {
-        variant: stockAction.variant,
-        quantity: stockAction.quantity,
-        action: stockAction.action,
+      await axios.post(endpoint, requestData);
+
+      // Reset form
+      setStockAction({
+        productId: "",
+        variantCombination: "",
+        quantity: 1,
+        action: "add"
       });
+
+      setError("");
       fetchProducts();
     } catch (err) {
-      setError("Stock update failed.");
+      console.error('Stock update error:', err);
+      setError(err.response?.data?.message || "Stock update failed.");
+    } finally {
+      setLoading(false);
     }
   };
+
   const filteredProducts = products?.filter(product =>
     product.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.productCode.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const copyProductId = (productId) => {
+    navigator.clipboard.writeText(productId).then(() => {
+      // You could add a toast notification here
+      console.log('Product ID copied to clipboard');
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -153,21 +243,34 @@ export default function ProductInventory() {
                 <input
                   type="text"
                   placeholder="Enter product name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.productName}
+                  onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Product Code
+                  Product Code *
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter product code"
-                  value={formData.productCode || ''}
+                  placeholder="Enter product code (e.g., PRD001)"
+                  value={formData.productCode}
                   onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Product Image URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="Enter image URL (optional)"
+                  value={formData.productImage}
+                  onChange={(e) => setFormData({ ...formData, productImage: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
@@ -178,9 +281,9 @@ export default function ProductInventory() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter HSN code"
-                  value={formData.hsncode || ''}
-                  onChange={(e) => setFormData({ ...formData, hsncode: e.target.value })}
+                  placeholder="Enter HSN code (e.g., 6109)"
+                  value={formData.hsnCode}
+                  onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
@@ -195,7 +298,7 @@ export default function ProductInventory() {
                       <div className="flex items-center gap-2 mb-3">
                         <input
                           type="text"
-                          placeholder="Variant name (e.g., Color, Size)"
+                          placeholder="Variant name (e.g., Size, Color)"
                           name="variant"
                           value={variant.name}
                           onChange={(e) => handleFormChange(i, null, e)}
@@ -215,16 +318,16 @@ export default function ProductInventory() {
                         <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">
                           Options
                         </label>
-                        {variant.options?.map((option, j) => (
+                        {variant.options.map((option, j) => (
                           <div key={j} className="flex items-center gap-2">
                             <input
                               type="text"
-                              placeholder="Option value"
-                              value={option.optionValue || ''}
+                              placeholder="Option value (e.g., S, M, L or Red, Blue)"
+                              value={option}
                               onChange={(e) => handleFormChange(i, j, e)}
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
                             />
-                            {variant.options?.length > 1 && (
+                            {variant.options.length > 1 && (
                               <button
                                 onClick={() => removeSubVariant(i, j)}
                                 className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
@@ -233,17 +336,7 @@ export default function ProductInventory() {
                               </button>
                             )}
                           </div>
-                        )) || (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder="Option value"
-                              value=""
-                              onChange={(e) => handleFormChange(i, 0, e)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-                            />
-                          </div>
-                        )}
+                        ))}
                         <button
                           onClick={() => addSubVariant(i)}
                           className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -274,8 +367,6 @@ export default function ProductInventory() {
               </button>
             </div>
           </div>
-
-          {/* Stock Management */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Edit3 className="w-5 h-5" />
@@ -285,34 +376,40 @@ export default function ProductInventory() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Product ID
+                  Product ID *
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter product ID"
+                  placeholder="Enter product ID (UUID)"
                   value={stockAction.productId}
                   onChange={(e) => setStockAction({ ...stockAction, productId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  You can copy the product ID from the product list below
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Variant
+                  Variant Combination *
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter variant name"
-                  value={stockAction.variant}
-                  onChange={(e) => setStockAction({ ...stockAction, variant: e.target.value })}
+                  placeholder="Enter variant combination (e.g., blue, red-large, size-m-color-blue)"
+                  value={stockAction.variantCombination}
+                  onChange={(e) => setStockAction({ ...stockAction, variantCombination: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter the specific variant combination (case-sensitive)
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity
+                    Quantity *
                   </label>
                   <input
                     type="number"
@@ -325,7 +422,7 @@ export default function ProductInventory() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Action
+                    Action *
                   </label>
                   <select
                     value={stockAction.action}
@@ -338,109 +435,110 @@ export default function ProductInventory() {
                 </div>
               </div>
 
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-1 bg-blue-100 rounded">
+                    <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-blue-800 mb-1">How to use:</h4>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>• Copy the Product ID from any product card below</li>
+                      <li>• Enter the exact variant combination (e.g., "blue", "large-red")</li>
+                      <li>• Choose quantity and action (Add/Remove)</li>
+                      <li>• Click "Update Stock" to apply changes</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
               <button
                 onClick={handleStockChange}
-                disabled={loading}
+                disabled={loading || !stockAction.productId || !stockAction.variantCombination}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? "Updating..." : "Update Stock"}
+                {loading ? "Updating..." : `${stockAction.action === 'add' ? 'Add' : 'Remove'} Stock`}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Product List */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mt-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Product List ({filteredProducts?.length || 0})
-            </h2>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none w-64"
-              />
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-              <span className="ml-2 text-gray-600">Loading products...</span>
-            </div>
-          ) : !filteredProducts || filteredProducts.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No products found</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProducts.map((product) => (
-                <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{product.productName}</h3>
-                      <p className="text-sm text-gray-600">{product.productCode}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full block mb-1">
-                        ID: {product.id.substring(0, 8)}...
-                      </span>
-                      <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
-                        Stock: {product.totalStock || 0}
-                      </span>
-                    </div>
-                  </div>
-
-                  {product.hsncode && (
-                    <div className="mb-3">
-                      <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
-                        HSN: {product.hsncode}
-                      </span>
-                    </div>
-                  )}
-
-                  {product.variants?.length > 0 && (
-                    <div className="space-y-3">
-                      {product.variants.map((variant, vi) => (
-                        <div key={vi} className="bg-gray-50 rounded-md p-3">
-                          <p className="text-sm font-medium text-gray-700 mb-2">
-                            {variant.name}
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {variant.options?.map((option, oi) => (
-                              <span
-                                key={oi}
-                                className="inline-block bg-white text-gray-600 text-xs px-2 py-1 rounded border"
-                              >
-                                {option.optionValue}
-                              </span>
-                            )) || (
-                              <span className="inline-block bg-white text-gray-400 text-xs px-2 py-1 rounded border italic">
-                                No options
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
-                    <span>Created: {new Date(product.createDate).toLocaleDateString()}</span>
-                    <span className={`px-2 py-1 rounded-full ${product.active ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                      {product.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredProducts.map((product) => (
+            <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{product.productName}</h3>
+                  <p className="text-sm text-gray-600">{product.productCode}</p>
                 </div>
-              ))}
+                <div className="text-right">
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                      ID: {product.id.substring(0, 8)}...
+                    </span>
+                    <button
+                      onClick={() => copyProductId(product.id)}
+                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Copy full Product ID"
+                    >
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                        <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                    Stock: {product.totalStock || 0}
+                  </span>
+                </div>
+              </div>
+
+              {product.hsncode && (
+                <div className="mb-3">
+                  <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
+                    HSN: {product.hsncode}
+                  </span>
+                </div>
+              )}
+
+              {product.variants?.length > 0 && (
+                <div className="space-y-3">
+                  {product.variants.map((variant, vi) => (
+                    <div key={vi} className="bg-gray-50 rounded-md p-3">
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        {variant.name}
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {variant.options?.map((option, oi) => (
+                          <span
+                            key={oi}
+                            className="inline-block bg-white text-gray-600 text-xs px-2 py-1 rounded border cursor-pointer hover:bg-blue-50 transition-colors"
+                            title="Click to use as variant combination"
+                            onClick={() => setStockAction({ ...stockAction, variantCombination: option.optionValue })}
+                          >
+                            {option.optionValue}
+                          </span>
+                        )) || (
+                            <span className="inline-block bg-white text-gray-400 text-xs px-2 py-1 rounded border italic">
+                              No options
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                <span>Created: {new Date(product.createDate).toLocaleDateString()}</span>
+                <span className={`px-2 py-1 rounded-full ${product.active ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {product.active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>
