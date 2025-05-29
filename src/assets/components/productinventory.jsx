@@ -24,7 +24,7 @@ export default function ProductInventory() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get("/api/products");
+      const response = await axios.get("/ProductInventory/create");
       setProducts(response.data);
     } catch (err) {
       setError("Failed to fetch products.");
@@ -69,7 +69,7 @@ const removeSubVariant = (variantIndex, subVariantIndex) => {
     if (!formData.name.trim()) return setError("Product name is required.");
 
     try {
-      await axios.post("/api/products", formData);
+      await axios.post("/ProductInventory/create", formData);
       setFormData({ name: "", variants: [{ name: "", subVariants: [""] }] });
       setError("");
       fetchProducts();
