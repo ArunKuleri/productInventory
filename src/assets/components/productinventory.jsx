@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios"; 
-import {Package, Plus, Minus, RefreshCw, AlertCircle, Edit3, Trash2, Search, Filter } from "lucide-react";
+import axios from "axios";
+import { Package, Plus, Minus, RefreshCw, AlertCircle, Edit3, Trash2, Search, Filter } from "lucide-react";
 
 export default function ProductInventory() {
   const [products, setProducts] = useState([]);
+  console.log(products,"kkkkkkkkkkkk");
+  
   const [formData, setFormData] = useState({
     name: "",
     variants: [{ name: "", subVariants: [""] }],
@@ -24,7 +26,7 @@ export default function ProductInventory() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get("/ProductInventory/create");
+      const response = await axios.get("ProductInventory?page=1&pageSize=10");
       setProducts(response.data);
     } catch (err) {
       setError("Failed to fetch products.");
@@ -54,22 +56,22 @@ export default function ProductInventory() {
     setFormData({ ...formData, variants: newVariants });
   };
   const removeVariant = (index) => {
-  const newVariants = [...formData.variants];
-  newVariants.splice(index, 1);
-  setFormData({ ...formData, variants: newVariants });
-};
+    const newVariants = [...formData.variants];
+    newVariants.splice(index, 1);
+    setFormData({ ...formData, variants: newVariants });
+  };
 
-const removeSubVariant = (variantIndex, subVariantIndex) => {
-  const newVariants = [...formData.variants];
-  newVariants[variantIndex].subVariants.splice(subVariantIndex, 1);
-  setFormData({ ...formData, variants: newVariants });
-};
+  const removeSubVariant = (variantIndex, subVariantIndex) => {
+    const newVariants = [...formData.variants];
+    newVariants[variantIndex].subVariants.splice(subVariantIndex, 1);
+    setFormData({ ...formData, variants: newVariants });
+  };
 
   const handleCreateProduct = async () => {
     if (!formData.name.trim()) return setError("Product name is required.");
 
     try {
-      await axios.post("/ProductInventory/create", formData);
+      await axios.post("/api/products", formData);
       setFormData({ name: "", variants: [{ name: "", subVariants: [""] }] });
       setError("");
       fetchProducts();
@@ -90,13 +92,13 @@ const removeSubVariant = (variantIndex, subVariantIndex) => {
       setError("Stock update failed.");
     }
   };
-const filteredProducts = Array.isArray(products)
-  ? products.filter(product =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  : [];
+  const filteredProducts = products?.filter(product =>
+    product.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.productCode.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-        <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
@@ -142,7 +144,7 @@ const filteredProducts = Array.isArray(products)
               <Plus className="w-5 h-5" />
               Create New Product
             </h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -153,6 +155,32 @@ const filteredProducts = Array.isArray(products)
                   placeholder="Enter product name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Product Code
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter product code"
+                  value={formData.productCode || ''}
+                  onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  HSN Code
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter HSN code"
+                  value={formData.hsncode || ''}
+                  onChange={(e) => setFormData({ ...formData, hsncode: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
@@ -182,21 +210,21 @@ const filteredProducts = Array.isArray(products)
                           </button>
                         )}
                       </div>
-                      
+
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">
-                          Sub-variants
+                          Options
                         </label>
-                        {variant.subVariants.map((sub, j) => (
+                        {variant.options?.map((option, j) => (
                           <div key={j} className="flex items-center gap-2">
                             <input
                               type="text"
-                              placeholder="Sub-variant value"
-                              value={sub}
+                              placeholder="Option value"
+                              value={option.optionValue || ''}
                               onChange={(e) => handleFormChange(i, j, e)}
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
                             />
-                            {variant.subVariants.length > 1 && (
+                            {variant.options?.length > 1 && (
                               <button
                                 onClick={() => removeSubVariant(i, j)}
                                 className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
@@ -205,19 +233,29 @@ const filteredProducts = Array.isArray(products)
                               </button>
                             )}
                           </div>
-                        ))}
+                        )) || (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="Option value"
+                              value=""
+                              onChange={(e) => handleFormChange(i, 0, e)}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            />
+                          </div>
+                        )}
                         <button
                           onClick={() => addSubVariant(i)}
                           className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
                         >
                           <Plus className="w-3 h-3" />
-                          Add Sub-variant
+                          Add Option
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-                
+
                 <button
                   onClick={addVariant}
                   className="mt-3 flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
@@ -243,7 +281,7 @@ const filteredProducts = Array.isArray(products)
               <Edit3 className="w-5 h-5" />
               Stock Management
             </h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -316,7 +354,7 @@ const filteredProducts = Array.isArray(products)
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               <Filter className="w-5 h-5" />
-              Product List ({filteredProducts.length})
+              Product List ({filteredProducts?.length || 0})
             </h2>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -335,7 +373,7 @@ const filteredProducts = Array.isArray(products)
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
               <span className="ml-2 text-gray-600">Loading products...</span>
             </div>
-          ) : filteredProducts.length === 0 ? (
+          ) : !filteredProducts || filteredProducts.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-600">No products found</p>
@@ -345,12 +383,28 @@ const filteredProducts = Array.isArray(products)
               {filteredProducts.map((product) => (
                 <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                      ID: {product.id}
-                    </span>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{product.productName}</h3>
+                      <p className="text-sm text-gray-600">{product.productCode}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full block mb-1">
+                        ID: {product.id.substring(0, 8)}...
+                      </span>
+                      <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
+                        Stock: {product.totalStock || 0}
+                      </span>
+                    </div>
                   </div>
-                  
+
+                  {product.hsncode && (
+                    <div className="mb-3">
+                      <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
+                        HSN: {product.hsncode}
+                      </span>
+                    </div>
+                  )}
+
                   {product.variants?.length > 0 && (
                     <div className="space-y-3">
                       {product.variants.map((variant, vi) => (
@@ -359,19 +413,30 @@ const filteredProducts = Array.isArray(products)
                             {variant.name}
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {variant.subVariants.map((sub, si) => (
+                            {variant.options?.map((option, oi) => (
                               <span
-                                key={si}
+                                key={oi}
                                 className="inline-block bg-white text-gray-600 text-xs px-2 py-1 rounded border"
                               >
-                                {sub}
+                                {option.optionValue}
                               </span>
-                            ))}
+                            )) || (
+                              <span className="inline-block bg-white text-gray-400 text-xs px-2 py-1 rounded border italic">
+                                No options
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
+
+                  <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                    <span>Created: {new Date(product.createDate).toLocaleDateString()}</span>
+                    <span className={`px-2 py-1 rounded-full ${product.active ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                      {product.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
